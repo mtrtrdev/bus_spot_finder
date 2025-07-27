@@ -1,0 +1,36 @@
+# OSが生成するファイル
+.DS_Store
+Thumbs.db
+
+# ビルド成果物
+/dist
+/build
+/out
+
+# 依存関係
+/node_modules
+/vendor # Pythonの場合など
+
+# 設定ファイル
+.env # 環境変数ファイル
+.env.*
+config.js.local # ローカル設定ファイルなど
+config.py.local
+
+# ログファイル
+*.log
+log/
+tmp/
+
+# エディタやIDEの一時ファイル
+.vscode/
+.idea/
+*.swp
+*~
+
+# Python関連 (もしバックエンドでPythonを使っている場合)
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/ # 仮想環境
