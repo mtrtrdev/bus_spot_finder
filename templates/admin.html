@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>管理者ダッシュボード</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: sans-serif; background-color: #f9fafb; }
+        .chart-container { position: relative; height: 400px; width: 100%; }
+        /* 非表示用クラスを定義（元々hidden-contentだったもの） */
+        .chart-hidden { display: none; }
+    </style>
+</head>
+<body class="text-gray-800">
+    <div class="container mx-auto p-4 md:p-8">
+        <header class="mb-8">
+            <h1 class="text-4xl font-bold text-gray-900">管理者ダッシュボード</h1>
+            <p class="text-lg text-gray-600">アプリケーションの利用状況</p>
+        </header>
+
+        <div id="stats-area" class="space-y-12">
+            </div>
+
+        <div class="mt-16">
+            <h2 class="text-3xl font-bold mb-6 border-b pb-3">最新の検索履歴 (最大50件)</h2>
+            <div class="bg-white rounded-lg shadow-md overflow-hidden">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">日時</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">路線</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">系統</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">起点バス停</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">検索場所</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        {% if search_history %}
+                            {% for item in search_history %}
+                            <tr>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ item.timestamp }}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ item.dataset_name }}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ item.system_name or 'N/A' }}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ item.bus_stop_name or 'N/A' }}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                    {{ item.place_name }}
+                                    <a href="https://www.google.com/maps/search/?api=1&query={{ item.place_name | urlencode }}"
+                                        target="_blank" rel="noopener noreferrer"
+                                        class="ml-2 px-2 py-1 bg-blue-200 text-blue-800 rounded hover:bg-blue-500 hover:text-white text-xs">
+                                        MAPで詳細を見る
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="5" class="px-6 py-12 text-center text-gray-500">まだ検索履歴はありません。</td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script id="chart-data" type="application/json">{{ chart_data_json | safe }}</script>
+    <script>
+        const chartData = JSON.parse(document.getElementById('chart-data').textContent);
+        const statsArea = document.getElementById('stats-area');
+
+        // デフォルトの非表示クラス名を変更
+        const hiddenClass = 'chart-hidden';
+
+        if (Object.keys(chartData).length === 0) {
+            statsArea.innerHTML = '<div class="bg-blue-100 border-blue-400 text-blue-700 px-4 py-3 rounded"><p>まだ統計データがありません。</p></div>';
+        } else {
+            for (const datasetKey in chartData) {
+                const dataset = chartData[datasetKey];
+                const container = document.createElement('div');
+                container.className = 'bg-white p-6 rounded-xl shadow-lg';
+
+                let selectorHTML = '', chartsHTML = '';
+                const systems = Object.keys(dataset.system_charts);
+                
+                if (systems.length > 0) {
+                    selectorHTML = `<div class="max-w-xs"><label for="selector-${datasetKey}" class="block text-sm font-medium text-gray-700">系統を選択:</label><select id="selector-${datasetKey}" class="mt-1 block w-full p-2 border-gray-300 rounded-md">`;
+                    for (const systemName of systems) {
+                        const slug = dataset.system_charts[systemName].slug;
+                        selectorHTML += `<option value="${slug}">${systemName}</option>`;
+                        // 初期表示では全てのグラフエリアに非表示クラスを付与
+                        chartsHTML += `<div id="chart-area-${slug}" class="system-chart-area ${hiddenClass}" data-dataset="${datasetKey}"><div class="chart-container"><canvas id="chart-${slug}"></canvas></div></div>`;
+                    }
+                    selectorHTML += '</select></div>';
+                } else {
+                    selectorHTML = '<p class="text-gray-500">この路線のバス停別検索データはありません。</p>';
+                }
+
+                container.innerHTML = `
+                    <h2 class="text-3xl font-bold text-blue-600 mb-4">${dataset.dataset_name}</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                        <div class="bg-blue-50 p-6 rounded-lg"><h3 class="text-lg font-semibold text-blue-800">ページアクセス数</h3><p class="text-4xl font-bold">${dataset.page_views}</p></div>
+                        <div class="bg-green-50 p-6 rounded-lg"><h3 class="text-lg font-semibold text-green-800">総検索回数</h3><p class="text-4xl font-bold">${dataset.total_searches}</p></div>
+                    </div>
+                    <h3 class="text-2xl font-bold mb-4 border-b pb-2">バス停別 検索数</h3>
+                    ${selectorHTML}<div class="mt-4">${chartsHTML}</div>`;
+                statsArea.appendChild(container);
+            }
+
+            for (const datasetKey in chartData) {
+                const dataset = chartData[datasetKey];
+                const systems = dataset.system_charts;
+                for (const systemName in systems) {
+                    const chartInfo = systems[systemName];
+                    const ctx = document.getElementById(`chart-${chartInfo.slug}`).getContext('2d');
+                    new Chart(ctx, {
+                        type: 'bar',
+                        data: { labels: chartInfo.labels, datasets: [{ label: '検索回数', data: chartInfo.data, backgroundColor: 'rgba(59, 130, 246, 0.5)' }] },
+                        options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+                    });
+                }
+
+                const selector = document.getElementById(`selector-${datasetKey}`);
+                if (selector) {
+                    const switchChart = () => {
+                        // 全てのグラフエリアを非表示にする
+                        document.querySelectorAll(`.system-chart-area[data-dataset="${datasetKey}"]`).forEach(area => area.classList.add(hiddenClass));
+                        // 選択されているグラフエリアのみ表示する
+                        document.getElementById(`chart-area-${selector.value}`).classList.remove(hiddenClass);
+                    };
+                    selector.addEventListener('change', switchChart);
+                    // ページ読み込み時に最初のグラフを表示する
+                    if (selector.options.length > 0) {
+                        switchChart();
+                    }
+                }
+            }
+        }
+    </script>
+</body>
+</html>

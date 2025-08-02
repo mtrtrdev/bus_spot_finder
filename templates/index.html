@@ -193,350 +193,364 @@
     const currentDataset = "{{ dataset }}";
   </script>
 
-  <script>
-    let map;
-    let searchCircle;
-    let searchMarkers = [];
-    let presetMarkers = [];
-    let mapConfig = {};
+<script>
+  let map;
+  let searchCircle;
+  let searchMarkers = [];
+  let presetMarkers = [];
+  let mapConfig = {};
 
-    async function loadMapConfig() {
-      try {
-        const response = await fetch('/get_map_config?dataset=' + encodeURIComponent(currentDataset));
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        mapConfig = await response.json();
-        console.log("Map Config loaded:", mapConfig); // デバッグ用
-        document.getElementById('siteTitle').textContent = mapConfig.siteInfo.title || "サイトタイトル";
-        document.getElementById('siteSubtitle').textContent = mapConfig.siteInfo.subtitle || "";
-
-        // バス系統セレクターの初期化（既存ロジックはそのまま）
-        const presetSelector = document.getElementById('presetSetSelector');
-        presetSelector.innerHTML = "";
-        Object.keys(mapConfig.busStops).forEach(key => {
-          const option = document.createElement("option");
-          option.value = key;
-          option.text = key;
-          presetSelector.appendChild(option);
-        });
-        presetSelector.value = Object.keys(mapConfig.busStops)[0];
-        presetSelector.addEventListener('change', (e) => {
-          setPresetMarkers(e.target.value);
-        });
-
-        // --- テーマ設定の変更点 ---
-        // UIからのテーマ選択は不要なので、セレクターへのオプション追加やイベントリスナーは不要です。
-        // mapConfigにデフォルトテーマが定義されていれば、それをwindow.selectedThemeに設定します。
-        if (mapConfig.themes && mapConfig.themes.defaultTheme && mapConfig.themes.options && mapConfig.themes.options[mapConfig.themes.defaultTheme]) {
-          window.selectedTheme = mapConfig.themes.defaultTheme;
-          console.log("デフォルトテーマが設定されました:", window.selectedTheme);
-        } else {
-          // mapConfigにデフォルトテーマが適切に定義されていない場合のフォールバック
-          // この場合、performNearbySearchは"観光"をキーワードとして使用します。
-          window.selectedTheme = null; // または任意のデフォルト値
-          console.warn("mapConfigにデフォルトテーマが適切に定義されていないため、テーマは設定されません。");
-        }
-
-        // html上の以下の要素にmapConfig.siteInfo.descriptionをセット
-        document.getElementById('siteDescription').textContent = mapConfig.siteInfo.description || "";
-
-
-
-      } catch (error) {
-        console.error("Failed to load map config:", error);
-        document.getElementById('siteTitle').textContent = "設定読み込みエラー";
-        document.getElementById('siteSubtitle').textContent = "コンソールを確認してください";
+  async function loadMapConfig() {
+    try {
+      const response = await fetch('/get_map_config?dataset=' + encodeURIComponent(currentDataset));
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
-    }
-    
-    function populateBusStopList(setName) {
-      const busStopList = document.getElementById('busStopList');
-      busStopList.innerHTML = "";
-      const stops = mapConfig.busStops[setName];
-      stops.forEach((stop, index) => {
-        const li = document.createElement("li");
-        li.id = "busStopItem-" + index;
-        li.className = "cursor-pointer p-2 rounded hover:bg-gray-200";
-        li.textContent = stop.name;
-        li.addEventListener("click", () => {
-          if (presetMarkers[index]) {
-            map.panTo(presetMarkers[index].getPosition());
-            map.setZoom(17);
-          }
-          highlightBusStopItem(index);
-        });
-        busStopList.appendChild(li);
+      mapConfig = await response.json();
+      console.log("Map Config loaded:", mapConfig); // デバッグ用
+      document.getElementById('siteTitle').textContent = mapConfig.siteInfo.title || "サイトタイトル";
+      document.getElementById('siteSubtitle').textContent = mapConfig.siteInfo.subtitle || "";
+
+      // バス系統セレクターの初期化
+      const presetSelector = document.getElementById('presetSetSelector');
+      presetSelector.innerHTML = "";
+      Object.keys(mapConfig.busStops).forEach(key => {
+        const option = document.createElement("option");
+        option.value = key;
+        option.text = key;
+        presetSelector.appendChild(option);
       });
-    }
-    
-    function highlightBusStopItem(index) {
-      const busStopItems = document.querySelectorAll("#busStopList li");
-      busStopItems.forEach((item, i) => {
-        if (i === index) {
-          item.classList.add("bg-green-200");
-          item.scrollIntoView({ behavior: "smooth", block: "center" });
-        } else {
-          item.classList.remove("bg-green-200");
-        }
+      presetSelector.value = Object.keys(mapConfig.busStops)[0];
+      presetSelector.addEventListener('change', (e) => {
+        setPresetMarkers(e.target.value);
       });
-    }
-    
-    function setPresetMarkers(setName) {
-      presetMarkers.forEach(marker => marker.setMap(null));
-      presetMarkers = [];
-      mapConfig.busStops[setName].forEach((preset, index) => {
-        const marker = new google.maps.Marker({
-          position: { lat: preset.lat, lng: preset.lng },
-          map: map,
-          title: preset.name,
-          icon: mapConfig.isAdminMode ? undefined : "http://maps.google.com/mapfiles/ms/icons/green-dot.png"
-        });
-        marker.addListener('click', () => {
-          performNearbySearch(marker.getPosition());
-          highlightBusStopItem(index);
-        });
-        presetMarkers.push(marker);
-      });
-      populateBusStopList(setName);
-    }
-    
-    async function initMap() {
-      await loadMapConfig();
-      map = new google.maps.Map(document.getElementById("map"), {
-        center: { lat: mapConfig.map.initialLat, lng: mapConfig.map.initialLng },
-        zoom: mapConfig.map.zoom,
-        mapTypeControl: false,
-        streetViewControl: false
-      });
-      if (mapConfig.isAdminMode) {
-        map.addListener("click", (e) => {
-          performNearbySearch(e.latLng);
-        });
+
+      if (mapConfig.themes && mapConfig.themes.defaultTheme && mapConfig.themes.options && mapConfig.themes.options[mapConfig.themes.defaultTheme]) {
+        window.selectedTheme = mapConfig.themes.defaultTheme;
+        console.log("デフォルトテーマが設定されました:", window.selectedTheme);
       } else {
-        map.addListener("click", (e) => {
-          console.log("非管理者モード: マップクリックは無効");
-        });
+        window.selectedTheme = null; 
+        console.warn("mapConfigにデフォルトテーマが適切に定義されていないため、テーマは設定されません。");
       }
-      // 初期プリセットは busStops の最初のキーを利用
-      setPresetMarkers(Object.keys(mapConfig.busStops)[0]);
+
+      document.getElementById('siteDescription').textContent = mapConfig.siteInfo.description || "";
+
+    } catch (error) {
+      console.error("Failed to load map config:", error);
+      document.getElementById('siteTitle').textContent = "設定読み込みエラー";
+      document.getElementById('siteSubtitle').textContent = "コンソールを確認してください";
     }
-    
-    function clearSearchResults() {
-      searchMarkers.forEach(marker => marker.setMap(null));
-      searchMarkers = [];
-      if (searchCircle) {
-        searchCircle.setMap(null);
-        searchCircle = null;
+  }
+  
+  function populateBusStopList(setName) {
+    const busStopList = document.getElementById('busStopList');
+    busStopList.innerHTML = "";
+    const stops = mapConfig.busStops[setName];
+    stops.forEach((stop, index) => {
+      const li = document.createElement("li");
+      li.id = "busStopItem-" + index;
+      li.className = "cursor-pointer p-2 rounded hover:bg-gray-200";
+      li.textContent = stop.name;
+      li.dataset.system = setName;
+      li.dataset.busStopName = stop.name; // バス停名をデータ属性に追加
+      li.addEventListener("click", () => {
+        if (presetMarkers[index]) {
+          map.panTo(presetMarkers[index].getPosition());
+          map.setZoom(17);
+        }
+        const system = li.dataset.system;
+        const busStopName = li.dataset.busStopName;
+        performNearbySearch(presetMarkers[index].getPosition(), system, busStopName);
+        highlightBusStopItem(index);
+      });
+      busStopList.appendChild(li);
+    });
+  }
+  
+  function highlightBusStopItem(index) {
+    const busStopItems = document.querySelectorAll("#busStopList li");
+    busStopItems.forEach((item, i) => {
+      if (i === index) {
+        item.classList.add("bg-green-200");
+        item.scrollIntoView({ behavior: "smooth", block: "center" });
+      } else {
+        item.classList.remove("bg-green-200");
       }
-      document.getElementById('searchResultsList').innerHTML = `<div class="text-center py-12">
-        <svg class="w-16 h-16 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
-        </svg>
-        <p class="text-gray-500 text-lg">地図をクリックして検索を開始してください</p>
-      </div>`;
-      console.log("Cleared previous search results.");
-    }
-    
-    async function requestGeminiDescription(place) {
-      try {
-        const response = await fetch("/generate_description", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: place.name,
-            address: place.vicinity || place.formatted_address || "所在地不明"
-          })
-        });
-        const data = await response.json();
-        return data.description || "回答の生成に失敗しました。";
-      } catch (error) {
-        console.error("Error fetching generate_description:", error);
-        return "生成中にエラーが発生しました。";
-      }
-    }
-    
-    async function performNearbySearch(centerLatLng) {
-      clearSearchResults();
-      document.getElementById('searchResultsList').innerHTML = `<div class="text-center py-12">
-        <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-kyoto-500 mb-4"></div>
-        <p class="text-gray-600 text-lg">検索中<span class="loading-dots"></span></p>
-      </div>`;
-      searchCircle = new google.maps.Circle({
-        strokeColor: "#d4762a",
-        strokeOpacity: 0.8,
-        strokeWeight: 2,
-        fillColor: "#d4762a",
-        fillOpacity: 0.1,
+    });
+  }
+  
+  function setPresetMarkers(setName) {
+    presetMarkers.forEach(marker => marker.setMap(null));
+    presetMarkers = [];
+    mapConfig.busStops[setName].forEach((preset, index) => {
+      const marker = new google.maps.Marker({
+        position: { lat: preset.lat, lng: preset.lng },
         map: map,
-        center: centerLatLng,
-        radius: 500,
+        title: preset.name,
+        icon: mapConfig.isAdminMode ? undefined : "http://maps.google.com/mapfiles/ms/icons/green-dot.png"
       });
-      map.setCenter(centerLatLng);
-      // configの情報を参照して検索条件を動的に設定
-      // デバッグ用に値を出力
-
-      let keyword = window.selectedTheme;
-      const service = new google.maps.places.PlacesService(map);
-      const request = {
-        location: centerLatLng,
-        radius: window.mapConfig && window.mapConfig.map && window.mapConfig.map.radius
-          ? window.mapConfig.map.radius
-          : 500,
-        keyword: keyword,
-        type: "point_of_interest"
-      };
-      service.nearbySearch(request, (results, status) => {
-        if (status === google.maps.places.PlacesServiceStatus.OK && results) {
-          displayResultsAsList(results);
-        } else if (status === google.maps.places.PlacesServiceStatus.ZERO_RESULTS) {
-          document.getElementById('searchResultsList').innerHTML = `<div class="text-center py-12">
-            <svg class="w-16 h-16 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-            </svg>
-            <p class="text-gray-500 text-lg">検索結果が見つかりませんでした</p>
-          </div>`;
-        } else {
-          document.getElementById('searchResultsList').innerHTML = `<div class="text-center py-12">
-            <svg class="w-16 h-16 text-red-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-            </svg>
-            <p class="text-red-500 text-lg">検索中にエラーが発生しました</p>
-          </div>`;
-        }
+      marker.addListener('click', () => {
+        const system = setName;
+        const busStopName = preset.name; // マーカーからバス停名を取得
+        performNearbySearch(marker.getPosition(), system, busStopName);
+        highlightBusStopItem(index);
+      });
+      presetMarkers.push(marker);
+    });
+    populateBusStopList(setName);
+  }
+  
+  async function initMap() {
+    await loadMapConfig();
+    map = new google.maps.Map(document.getElementById("map"), {
+      center: { lat: mapConfig.map.initialLat, lng: mapConfig.map.initialLng },
+      zoom: mapConfig.map.zoom,
+      mapTypeControl: false,
+      streetViewControl: false
+    });
+    if (mapConfig.isAdminMode) {
+      map.addListener("click", (e) => {
+        performNearbySearch(e.latLng, null, "地図クリック");
+      });
+    } else {
+      map.addListener("click", (e) => {
+        console.log("非管理者モード: マップクリックは無効");
       });
     }
+    setPresetMarkers(Object.keys(mapConfig.busStops)[0]);
+  }
+  
+  function clearSearchResults() {
+    searchMarkers.forEach(marker => marker.setMap(null));
+    searchMarkers = [];
+    if (searchCircle) {
+      searchCircle.setMap(null);
+      searchCircle = null;
+    }
+    document.getElementById('searchResultsList').innerHTML = `<div class="text-center py-12">
+      <svg class="w-16 h-16 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
+      </svg>
+      <p class="text-gray-500 text-lg">地図をクリックして検索を開始してください</p>
+    </div>`;
+    console.log("Cleared previous search results.");
+  }
+  
+  async function requestGeminiDescription(place) {
+    try {
+      const response = await fetch("/generate_description", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: place.name,
+          address: place.vicinity || place.formatted_address || "所在地不明",
+          dataset: currentDataset,
+        })
+      });
+      const data = await response.json();
+      return data.description || "回答の生成に失敗しました。";
+    } catch (error) {
+      console.error("Error fetching generate_description:", error);
+      return "生成中にエラーが発生しました。";
+    }
+  }
+  
+  async function performNearbySearch(centerLatLng, system, busStopName) {
+    clearSearchResults();
+    document.getElementById('searchResultsList').innerHTML = `<div class="text-center py-12">
+      <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-kyoto-500 mb-4"></div>
+      <p class="text-gray-600 text-lg">検索中<span class="loading-dots"></span></p>
+    </div>`;
     
-    function displayResultsAsList(results) {
-      const resultsList = document.getElementById('searchResultsList');
-      resultsList.innerHTML = "";
-      searchMarkers.forEach(marker => marker.setMap(null));
-      searchMarkers = [];
-      const searchCenter = searchCircle ? searchCircle.getCenter() : null;
-      if (results && results.length > 0 && searchCenter) {
-        let filteredResults = [];
-        results.forEach(place => {
-          const distance = google.maps.geometry.spherical.computeDistanceBetween(
-            searchCenter,
-            place.geometry.location
-          );
-          if (distance <= 500) {
-            filteredResults.push(place);
-          }
-        });
-        if (filteredResults.length > 0) {
-          const bounds = new google.maps.LatLngBounds();
-          filteredResults.forEach((place, index) => {
-            const marker = new google.maps.Marker({
-              map: map,
-              position: place.geometry.location,
-              title: place.name,
-              label: `${index + 1}`,
-              animation: google.maps.Animation.DROP
-            });
-            searchMarkers.push(marker);
-            bounds.extend(marker.getPosition());
-            marker.addListener('click', () => {
-              document.getElementById(`result-item-${index}`).scrollIntoView({
-                behavior: 'smooth',
-                block: 'center'
-              });
-            });
-            const resultItem = document.createElement('div');
-            resultItem.id = `result-item-${index}`;
-            resultItem.className = 'bg-gray-50 rounded-lg p-6 border border-gray-200 hover:shadow-md transition-shadow duration-200';
-            const address = place.vicinity || place.formatted_address || '住所情報なし';
-            resultItem.innerHTML = `
-              <div class="flex items-start space-x-4">
-                <div class="flex-shrink-0 w-8 h-8 bg-kyoto-500 text-white rounded-full flex items-center justify-center font-semibold text-sm">
-                  ${index + 1}
-                </div>
-                <div class="flex-1 min-w-0">
-                  <h3 class="text-lg font-semibold text-gray-900 mb-1 flex items-center space-x-2">
-                    <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.name)}
-                    ${place.geometry && place.geometry.location ? `%20@${place.geometry.location.lat()},${place.geometry.location.lng()}` : ''}"
-                       target="_blank" rel="noopener noreferrer"
-                       class="text-kyoto-600 hover:underline flex items-center"
-                       data-lat="${place.geometry && place.geometry.location ? place.geometry.location.lat() : ''}"
-                       data-lng="${place.geometry && place.geometry.location ? place.geometry.location.lng() : ''}"
-                       onclick="event.stopPropagation();">
-                      ${place.name}
-                    </a>
-                    ${
-                      place.photos && place.photos.length > 0
-                        ? `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.name)}
-                              ${place.geometry && place.geometry.location ? `%20@${place.geometry.location.lat()},${place.geometry.location.lng()}` : ''}"
-                              target="_blank" rel="noopener noreferrer"
-                              class="ml-2 px-2 py-1 bg-kyoto-200 text-kyoto-800 rounded hover:bg-kyoto-500 hover:text-white text-xs"
-                              onclick="event.stopPropagation();">
-                            MAPで詳細を見る
-                          </a>`
-                        : ''
-                    }
-                  </h3>
-                  ${
-                    place.rating
-                      ? `<div class="flex items-center text-yellow-500 text-sm mb-1">
-                          <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.286 3.967a1 1 0 00.95.69h4.175c.969 0 1.371 1.24.588 1.81l-3.38 2.455a1 1 0 00-.364 1.118l1.287 3.966c.3.922-.755 1.688-1.54 1.118l-3.38-2.454a1 1 0 00-1.175 0l-3.38 2.454c-.784.57-1.838-.196-1.54-1.118l1.287-3.966a1 1 0 00-.364-1.118L2.05 9.394c-.783-.57-.38-1.81.588-1.81h4.175a1 1 0 00.95-.69l1.286-3.967z"/>
-                          </svg>
-                          <span>${place.rating} / 5</span>
-                          ${place.user_ratings_total ? `<span class="ml-2 text-gray-400">(${place.user_ratings_total}件)</span>` : ''}
-                        </div>` : ''
-                  }
-                  <div class="flex items-center text-gray-500 text-sm mb-3">
-                    <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                      <path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd"></path>
-                    </svg>
-                    ${address}
-                  </div>
-                  <div class="bg-white rounded-lg p-4 border border-gray-100">
-                    <div class="flex items-center text-sm text-gray-500 mb-2">
-                      <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
-                      </svg>
-                      AI による詳細情報
-                    </div>
-                    <div class="ai-response text-gray-700">
-                      <div class="flex items-center space-x-2">
-                        <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-kyoto-500"></div>
-                        <span class="text-sm text-gray-500">生成中<span class="loading-dots"></span></span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            `;
-            document.getElementById('searchResultsList').appendChild(resultItem);
-            requestGeminiDescription(place).then(response => {
-              resultItem.querySelector('.ai-response').innerHTML = `<p class="leading-relaxed">${response}</p>`;
-            });
-          });
-          if (searchCircle) {
-            bounds.extend(searchCircle.getBounds().getNorthEast());
-            bounds.extend(searchCircle.getBounds().getSouthWest());
-          }
-          map.fitBounds(bounds);
-        } else {
-          document.getElementById('searchResultsList').innerHTML = `<div class="text-center py-12">
-            <svg class="w-16 h-16 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-            </svg>
-            <p class="text-gray-500 text-lg">指定された範囲内に検索結果が見つかりませんでした</p>
-          </div>`;
-        }
-      } else {
+    // ログアクションをサーバーに送信
+    try {
+      await fetch('/log_action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'nearby_search',
+          dataset: currentDataset,
+          system: system,
+          bus_stop_name: busStopName,
+          place_name: busStopName || "検索地点"
+        })
+      });
+    } catch (error) {
+      console.error('Failed to log action:', error);
+    }
+    
+    searchCircle = new google.maps.Circle({
+      strokeColor: "#d4762a",
+      strokeOpacity: 0.8,
+      strokeWeight: 2,
+      fillColor: "#d4762a",
+      fillOpacity: 0.1,
+      map: map,
+      center: centerLatLng,
+      radius: 500,
+    });
+    map.setCenter(centerLatLng);
+
+    let keyword = window.selectedTheme;
+    const service = new google.maps.places.PlacesService(map);
+    const request = {
+      location: centerLatLng,
+      radius: window.mapConfig && window.mapConfig.map && window.mapConfig.map.radius
+        ? window.mapConfig.map.radius
+        : 500,
+      keyword: keyword,
+      type: "point_of_interest"
+    };
+    service.nearbySearch(request, (results, status) => {
+      if (status === google.maps.places.PlacesServiceStatus.OK && results) {
+        displayResultsAsList(results);
+      } else if (status === google.maps.places.PlacesServiceStatus.ZERO_RESULTS) {
         document.getElementById('searchResultsList').innerHTML = `<div class="text-center py-12">
           <svg class="w-16 h-16 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
           </svg>
           <p class="text-gray-500 text-lg">検索結果が見つかりませんでした</p>
         </div>`;
+      } else {
+        document.getElementById('searchResultsList').innerHTML = `<div class="text-center py-12">
+          <svg class="w-16 h-16 text-red-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+          </svg>
+          <p class="text-red-500 text-lg">検索中にエラーが発生しました</p>
+        </div>`;
       }
-    }
-  </script>
+    });
+  }
   
-  <script src="https://maps.googleapis.com/maps/api/js?key={{ maps_api_key }}&libraries=places,geometry&callback=initMap&v=beta&rand={{ cache_buster }}" loading="async" async defer></script>
+  function displayResultsAsList(results) {
+    const resultsList = document.getElementById('searchResultsList');
+    resultsList.innerHTML = "";
+    searchMarkers.forEach(marker => marker.setMap(null));
+    searchMarkers = [];
+    const searchCenter = searchCircle ? searchCircle.getCenter() : null;
+    if (results && results.length > 0 && searchCenter) {
+      let filteredResults = [];
+      results.forEach(place => {
+        const distance = google.maps.geometry.spherical.computeDistanceBetween(
+          searchCenter,
+          place.geometry.location
+        );
+        if (distance <= 500) {
+          filteredResults.push(place);
+        }
+      });
+      if (filteredResults.length > 0) {
+        const bounds = new google.maps.LatLngBounds();
+        filteredResults.forEach((place, index) => {
+          const marker = new google.maps.Marker({
+            map: map,
+            position: place.geometry.location,
+            title: place.name,
+            label: `${index + 1}`,
+            animation: google.maps.Animation.DROP
+          });
+          searchMarkers.push(marker);
+          bounds.extend(marker.getPosition());
+          marker.addListener('click', () => {
+            document.getElementById(`result-item-${index}`).scrollIntoView({
+              behavior: 'smooth',
+              block: 'center'
+            });
+          });
+          const resultItem = document.createElement('div');
+          resultItem.id = `result-item-${index}`;
+          resultItem.className = 'bg-gray-50 rounded-lg p-6 border border-gray-200 hover:shadow-md transition-shadow duration-200';
+          const address = place.vicinity || place.formatted_address || '住所情報なし';
+          resultItem.innerHTML = `
+            <div class="flex items-start space-x-4">
+              <div class="flex-shrink-0 w-8 h-8 bg-kyoto-500 text-white rounded-full flex items-center justify-center font-semibold text-sm">
+                ${index + 1}
+              </div>
+              <div class="flex-1 min-w-0">
+                <h3 class="text-lg font-semibold text-gray-900 mb-1 flex items-center space-x-2">
+                  <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.name)}
+                  ${place.geometry && place.geometry.location ? `%20@${place.geometry.location.lat()},${place.geometry.location.lng()}` : ''}"
+                     target="_blank" rel="noopener noreferrer"
+                     class="text-kyoto-600 hover:underline flex items-center"
+                     data-lat="${place.geometry && place.geometry.location ? place.geometry.location.lat() : ''}"
+                     data-lng="${place.geometry && place.geometry.location ? place.geometry.location.lng() : ''}"
+                     onclick="event.stopPropagation();">
+                    ${place.name}
+                  </a>
+                  ${
+                    place.photos && place.photos.length > 0
+                      ? `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.name)}
+                            ${place.geometry && place.geometry.location ? `%20@${place.geometry.location.lat()},${place.geometry.location.lng()}` : ''}"
+                            target="_blank" rel="noopener noreferrer"
+                            class="ml-2 px-2 py-1 bg-kyoto-200 text-kyoto-800 rounded hover:bg-kyoto-500 hover:text-white text-xs"
+                            onclick="event.stopPropagation();">
+                          MAPで詳細を見る
+                        </a>`
+                      : ''
+                  }
+                </h3>
+                ${
+                  place.rating
+                    ? `<div class="flex items-center text-yellow-500 text-sm mb-1">
+                        <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.286 3.967a1 1 0 00.95.69h4.175c.969 0 1.371 1.24.588 1.81l-3.38 2.455a1 1 0 00-.364 1.118l1.287 3.966c.3.922-.755 1.688-1.54 1.118l-3.38-2.454a1 1 0 00-1.175 0l-3.38 2.454c-.784.57-1.838-.196-1.54-1.118l1.287-3.966a1 1 0 00-.364-1.118L2.05 9.394c-.783-.57-.38-1.81.588-1.81h4.175a1 1 0 00.95-.69l1.286-3.967z"/>
+                        </svg>
+                        <span>${place.rating} / 5</span>
+                        ${place.user_ratings_total ? `<span class="ml-2 text-gray-400">(${place.user_ratings_total}件)</span>` : ''}
+                      </div>` : ''
+                }
+                <div class="flex items-center text-gray-500 text-sm mb-3">
+                  <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd"></path>
+                  </svg>
+                  ${address}
+                </div>
+                <div class="bg-white rounded-lg p-4 border border-gray-100">
+                  <div class="flex items-center text-sm text-gray-500 mb-2">
+                    <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
+                    </svg>
+                    AI による詳細情報
+                  </div>
+                  <div class="ai-response text-gray-700">
+                    <div class="flex items-center space-x-2">
+                      <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-kyoto-500"></div>
+                      <span class="text-sm text-gray-500">生成中<span class="loading-dots"></span></span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          `;
+          document.getElementById('searchResultsList').appendChild(resultItem);
+          requestGeminiDescription(place).then(response => {
+            resultItem.querySelector('.ai-response').innerHTML = `<p class="leading-relaxed">${response}</p>`;
+          });
+        });
+        if (searchCircle) {
+          bounds.extend(searchCircle.getBounds().getNorthEast());
+          bounds.extend(searchCircle.getBounds().getSouthWest());
+        }
+        map.fitBounds(bounds);
+      } else {
+        document.getElementById('searchResultsList').innerHTML = `<div class="text-center py-12">
+          <svg class="w-16 h-16 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+          </svg>
+          <p class="text-gray-500 text-lg">指定された範囲内に検索結果が見つかりませんでした</p>
+        </div>`;
+      }
+    } else {
+      document.getElementById('searchResultsList').innerHTML = `<div class="text-center py-12">
+        <svg class="w-16 h-16 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+        </svg>
+        <p class="text-gray-500 text-lg">検索結果が見つかりませんでした</p>
+      </div>`;
+    }
+  }
+</script>
+<script src="https://maps.googleapis.com/maps/api/js?key={{ maps_api_key }}&libraries=places,geometry&callback=initMap&v=beta&rand={{ cache_buster }}" loading="async" async defer></script>
 </body>
 </html>
